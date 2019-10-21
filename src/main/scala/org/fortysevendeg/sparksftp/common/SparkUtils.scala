@@ -2,6 +2,7 @@ package org.fortysevendeg.sparksftp.common
 
 import java.net.URI
 
+import cats.effect.IO
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTPConfig}
@@ -29,7 +30,7 @@ object SparkUtils {
     sparkSession
   }
 
-  def dataframeFromCSV(sparkSession: SparkSession, sftpUri: String): DataFrame = {
+  def dataframeFromCSV(sparkSession: SparkSession, sftpUri: String): IO[DataFrame] = IO {
     val inferSchema         = true
     val first_row_is_header = true
     val sourceUri           = new URI(sftpUri)
@@ -45,7 +46,7 @@ object SparkUtils {
       df: DataFrame,
       name: String,
       partitionBy: Seq[String] = Seq.empty
-  ) = {
+  ): IO[Unit] = IO {
     // Persist the dataframes into Hive tables with parquet file format, the default compression for parquet is snappy, that is splittable for parquet.
     // Another option: externalTable (HDFS, Hive)
     // If we wanted to debug any issue with the databases, we could use this: sparkSession.sparkContext.setLogLevel("DEBUG")
@@ -58,19 +59,21 @@ object SparkUtils {
       .saveAsTable(name)
   }
 
-  def dataframeToCompressedCsv(df: DataFrame, path: String) = {
-    df.coalesce(1)
-      .write
-      .mode(SaveMode.Overwrite)
-      .option("codec", "org.apache.hadoop.io.compress.GzipCodec")
-      .csv(path)
-  }
+  def dataframeToCompressedCsv(df: DataFrame, path: String): IO[Unit] =
+    IO {
+      df.coalesce(1)
+        .write
+        .mode(SaveMode.Overwrite)
+        .option("codec", "org.apache.hadoop.io.compress.GzipCodec")
+        .csv(path)
+    }
 
-  def dataframeToCsv(df: DataFrame, path: String) = {
-    df.write
-      .mode(SaveMode.Overwrite)
-      .csv(path)
-  }
+  def dataframeToCsv(df: DataFrame, path: String): IO[Unit] =
+    IO {
+      df.write
+        .mode(SaveMode.Overwrite)
+        .csv(path)
+    }
 
   /**
    * Construct a Spark DataFrame reading a file from SFTP using the `springml` connector
@@ -79,7 +82,7 @@ object SparkUtils {
       sparkSession: SparkSession,
       sftpConfig: SFTPConfig,
       path: String
-  ): DataFrame = {
+  ): IO[DataFrame] = IO {
     sparkSession.read
       .format("com.springml.spark.sftp")
       .option("host", sftpConfig.sftpHost)
@@ -99,7 +102,7 @@ object SparkUtils {
       df: DataFrame,
       sftpConfig: SFTPConfig,
       path: String
-  ) = {
+  ): IO[Unit] = IO {
     df.write
       .format("com.springml.spark.sftp")
       .option("host", sftpConfig.sftpHost)
