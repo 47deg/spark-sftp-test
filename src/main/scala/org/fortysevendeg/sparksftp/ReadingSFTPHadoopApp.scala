@@ -18,6 +18,13 @@ object ReadingSFTPHadoopApp extends IOApp {
     ConfigLoader[IO]
       .loadConfig[ReadingSFTPConfig]
 
+
+  /**
+   * When preparing the SparkConf, we could also use:
+   * .set("spark.master", "local")
+   * .set("spark.master", "local[*]")
+   *  to run the application locally, for example, through "sbt run"
+   */
   def run(args: List[String]): IO[ExitCode] =
     for {
       // Read the application parameters and prepare the spark session.
@@ -26,12 +33,7 @@ object ReadingSFTPHadoopApp extends IOApp {
         .set("fs.sftp.impl", "org.apache.hadoop.fs.sftpwithseek.SFTPFileSystem")
         .set("fs.sftp.impl.disable.cache", "true")
 
-      /**
-        We could also use:
-          .set("spark.master", "local")
-          .set("spark.master", "local[*]")
-        or to run the application locally, for example, through "sbt run"
-       */
+
       sparkSession = getSparkSessionWithHive(defaultSparkConf)
 
       sftpConfig = configs.SFTPConfig
