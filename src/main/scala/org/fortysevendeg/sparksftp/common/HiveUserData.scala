@@ -11,8 +11,8 @@ import SparkUtils._
  * Sample operations to perform on the user data
  */
 object HiveUserData {
-  
-  def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame) = {
+
+  def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame): Unit = {
 
     persistDataFrame(sparkSession, users.select("ID", "name", "age"), "user_data", Seq("age"))
     persistDataFrame(sparkSession, salaries.select("ID", "salary"), "salaries")
