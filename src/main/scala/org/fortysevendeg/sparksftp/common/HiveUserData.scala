@@ -10,6 +10,9 @@ import SparkUtils._
  *
  * Sample operations to perform on the user data
  */
+
+case class HiveUserData(usersData: DataFrame, salariesData: DataFrame, userAndSalariesData: DataFrame)
+
 object HiveUserData {
 
   def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame): Unit = {
@@ -27,7 +30,7 @@ object HiveUserData {
     sparkSession.sql("show tables").show(truncate = false)
   }
 
-  def readUserData(sparkSession: SparkSession): (DataFrame, DataFrame, DataFrame) = {
+  def readUserData(sparkSession: SparkSession): HiveUserData = {
     //Used to return the dataframe and show an excerpt in console
     val userDataFromHive = sparkSession.sql("select name from user_data")
     userDataFromHive.show(false)
@@ -39,7 +42,7 @@ object HiveUserData {
     val userSalaries = sparkSession.sql("select name,salary from user_salary")
     userSalaries.show(false)
 
-    (userDataFromHive, salariesDataFromHive, userSalaries)
+    HiveUserData(userDataFromHive, salariesDataFromHive, userSalaries)
   }
 
 }

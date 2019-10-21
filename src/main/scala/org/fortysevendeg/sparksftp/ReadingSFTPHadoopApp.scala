@@ -48,7 +48,7 @@ object ReadingSFTPHadoopApp extends IOApp {
 
       // Sample operations to persist and query the Hive database
       _ = HiveUserData.persistUserData(sparkSession, users, salaries)
-      (userDataFromHive, salariesDataFromHive, userSalaries) = HiveUserData.readUserData(
+      HiveUserData(userDataFromHive, salariesDataFromHive, userSalaries) = HiveUserData.readUserData(
         sparkSession
       )
 
