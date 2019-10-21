@@ -1,7 +1,9 @@
 package org.fortysevendeg.sparksftp.common
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import SparkUtils._
+import cats.effect.IO
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Notes regarding operating with Hive:
@@ -10,8 +12,11 @@ import SparkUtils._
  *
  * Sample operations to perform on the user data
  */
-
-case class HiveUserData(usersData: DataFrame, salariesData: DataFrame, userAndSalariesData: DataFrame)
+case class HiveUserData(
+    usersData: DataFrame,
+    salariesData: DataFrame,
+    userAndSalariesData: DataFrame
+)
 
 object HiveUserData {
 
@@ -43,6 +48,25 @@ object HiveUserData {
     userSalaries.show(false)
 
     HiveUserData(userDataFromHive, salariesDataFromHive, userSalaries)
+  }
+
+  def persistAndReadUserData(
+      sparkSession: SparkSession,
+      users: DataFrame,
+      salaries: DataFrame
+  ): IO[HiveUserData] = IO {
+    HiveUserData.persistUserData(sparkSession, users, salaries)
+    HiveUserData.readUserData(sparkSession)
+  }
+
+  def calculateAndPersistNewSalary(
+      sparkSession: SparkSession,
+      userSalaries: DataFrame
+  ): IO[Dataset[Row]] = IO {
+    val newSalaries =
+      userSalaries.withColumn("new_salary", (userSalaries("salary") * 1.1).cast(IntegerType))
+    SparkUtils.persistDataFrame(sparkSession, newSalaries, "user_new_salary")
+    sparkSession.sql("select name,salary from user_new_salary")
   }
 
 }
