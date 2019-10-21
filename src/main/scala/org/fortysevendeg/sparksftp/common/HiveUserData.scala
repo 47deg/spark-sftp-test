@@ -8,11 +8,10 @@ import SparkUtils._
  * Creating databases do not work in Dataproc: https://github.com/mozafari/verdictdb/issues/163
  * https://stackoverflow.com/questions/30664008/how-to-save-dataframe-directly-to-hive
  *
+ * Sample operations to perform on the user data
  */
 object HiveUserData {
-
-  /** Sample operations to perform on the user data
-   */
+  
   def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame) = {
 
     persistDataFrame(sparkSession, users.select("ID", "name", "age"), "user_data", Seq("age"))
