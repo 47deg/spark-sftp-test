@@ -37,10 +37,10 @@ object HiveUserData {
     salariesDataFromHive.show(false)
 
     //Excerpt from the joined table
-    val user_salaries = sparkSession.sql("select name,salary from user_salary")
-    //.show(false)
+    val userSalaries = sparkSession.sql("select name,salary from user_salary")
+    userSalaries.show(false)
 
-    (userDataFromHive, salariesDataFromHive, user_salaries)
+    (userDataFromHive, salariesDataFromHive, userSalaries)
   }
 
 }
