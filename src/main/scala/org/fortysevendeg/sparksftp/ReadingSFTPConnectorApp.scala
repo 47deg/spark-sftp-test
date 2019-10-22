@@ -1,6 +1,7 @@
 package org.fortysevendeg.sparksftp
 
-import cats.effect.{ExitCode, IO, IOApp}
+import cats.implicits._
+import cats.effect.{ContextShift, ExitCode, IO, IOApp}
 import pureconfig.generic.auto._
 import org.apache.spark.SparkConf
 import org.fortysevendeg.sparksftp.common.SparkUtils._
@@ -11,7 +12,10 @@ import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTP
 import org.training.trainingbot.config.ConfigLoader
 import org.fortysevendeg.sparksftp.config.model.configs
 
+import scala.concurrent.ExecutionContext
+
 object ReadingSFTPConnectorApp extends IOApp {
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   def setupConfig: IO[ReadingSFTPConfig] =
     ConfigLoader[IO]
@@ -30,39 +34,43 @@ object ReadingSFTPConnectorApp extends IOApp {
     def readDataFramesWithSFTPConnector(
         sparkSession: SparkSession,
         sftpConfig: SFTPConfig
-    ): IO[(DataFrame, DataFrame)] = {
-      val users =
-        dataframeFromCsvWithSFTPConnector(sparkSession, sftpConfig, sftpConfig.sftpUserPath)
-      val salaries = dataframeFromCsvWithSFTPConnector(
-        sparkSession,
-        sftpConfig,
-        sftpConfig.sftpSalaryPath
-      )
-      IO((users, salaries))
-    }
+    ): IO[(DataFrame, DataFrame)] =
+      for {
+        users <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpUserPath
+        )
+        salaries <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpSalaryPath
+        )
+      } yield (users, salaries)
 
     def toSFTPCompressedCSVWithSFTPConnector(
         userData: DataFrame,
         salariesData: DataFrame,
         userNewSalaries: DataFrame,
         sftpConfig: SFTPConfig
-    ): IO[Unit] = IO {
-      dataframeToCompressedCsvWithSFTPConnector(
-        userData,
-        sftpConfig,
-        s"${sftpConfig.sftpUserPath}_output"
-      )
-      dataframeToCompressedCsvWithSFTPConnector(
-        salariesData,
-        sftpConfig,
-        s"${sftpConfig.sftpSalaryPath}_output"
-      )
-      dataframeToCompressedCsvWithSFTPConnector(
-        userNewSalaries,
-        sftpConfig,
-        s"${sftpConfig.sftpSalaryPath}_transformed_output"
-      )
-    }
+    ): IO[Unit] =
+      for {
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userData,
+          sftpConfig,
+          s"${sftpConfig.sftpUserPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          salariesData,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userNewSalaries,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_transformed_output"
+        )
+      } yield ()
 
     for {
       config  <- setupConfig
