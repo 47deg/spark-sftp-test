@@ -12,7 +12,7 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Sample operations to perform on the user data
  */
-case class HiveUserData(
+final case class HiveUserData(
     usersData: DataFrame,
     salariesData: DataFrame,
     userAndSalariesData: DataFrame
