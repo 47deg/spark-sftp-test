@@ -1,7 +1,6 @@
 package org.fortysevendeg.sparksftp
 
-import cats.implicits._
-import cats.effect.{ContextShift, ExitCode, IO, IOApp}
+import cats.effect.{ExitCode, IO, IOApp}
 import pureconfig.generic.auto._
 import org.apache.spark.SparkConf
 import org.fortysevendeg.sparksftp.common.SparkUtils._
@@ -12,10 +11,7 @@ import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTP
 import org.training.trainingbot.config.ConfigLoader
 import org.fortysevendeg.sparksftp.config.model.configs
 
-import scala.concurrent.ExecutionContext
-
 object ReadingSFTPConnectorApp extends IOApp {
-  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   def setupConfig: IO[ReadingSFTPConfig] =
     ConfigLoader[IO]
