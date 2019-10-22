@@ -45,7 +45,7 @@ object SparkUtils {
       sparkSession: SparkSession,
       df: DataFrame,
       name: String,
-      partitionBy: Seq[String] = Seq.empty
+      partitionBy: List[String] = List.empty
   ): IO[Unit] = IO {
     // Persist the dataframes into Hive tables with parquet file format, the default compression for parquet is snappy, that is splittable for parquet.
     // Another option: externalTable (HDFS, Hive)

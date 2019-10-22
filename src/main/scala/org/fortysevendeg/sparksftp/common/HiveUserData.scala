@@ -22,7 +22,7 @@ object HiveUserData {
 
   def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame): Unit = {
 
-    persistDataFrame(sparkSession, users.select("ID", "name", "age"), "user_data", Seq("age"))
+    persistDataFrame(sparkSession, users.select("ID", "name", "age"), "user_data", List("age"))
     persistDataFrame(sparkSession, salaries.select("ID", "salary"), "salaries")
 
     val userWithSalaries = users.join(salaries, "ID").select("ID", "name", "age", "salary")
