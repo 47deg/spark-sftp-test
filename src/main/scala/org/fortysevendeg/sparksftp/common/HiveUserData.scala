@@ -20,22 +20,28 @@ case class HiveUserData(
 
 object HiveUserData {
 
-  def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame): Unit = {
+  def persistUserData(sparkSession: SparkSession, users: DataFrame, salaries: DataFrame): IO[Unit] =
+    for {
 
-    persistDataFrame(sparkSession, users.select("ID", "name", "age"), "user_data", List("age"))
-    persistDataFrame(sparkSession, salaries.select("ID", "salary"), "salaries")
+      _ <- persistDataFrame(
+        sparkSession,
+        users.select("ID", "name", "age"),
+        "user_data",
+        List("age")
+      )
+      _ <- persistDataFrame(sparkSession, salaries.select("ID", "salary"), "salaries")
 
-    val userWithSalaries = users.join(salaries, "ID").select("ID", "name", "age", "salary")
-    persistDataFrame(sparkSession, userWithSalaries, "user_salary")
+      userWithSalaries = users.join(salaries, "ID").select("ID", "name", "age", "salary")
+      _ <- persistDataFrame(sparkSession, userWithSalaries, "user_salary")
 
-    // Show the list of tables in the spark console
-    users.printSchema()
-    salaries.printSchema()
-    sparkSession.catalog.listTables().show(truncate = false)
-    sparkSession.sql("show tables").show(truncate = false)
-  }
+      // Show the list of tables in the spark console
+      _ = users.printSchema()
+      _ = salaries.printSchema()
+      _ = sparkSession.catalog.listTables().show(truncate = false)
+      _ = sparkSession.sql("show tables").show(truncate = false)
+    } yield ()
 
-  def readUserData(sparkSession: SparkSession): HiveUserData = {
+  def readUserData(sparkSession: SparkSession): IO[HiveUserData] = IO {
     //Used to return the dataframe and show an excerpt in console
     val userDataFromHive = sparkSession.sql("select name from user_data")
     userDataFromHive.show(false)
@@ -54,10 +60,11 @@ object HiveUserData {
       sparkSession: SparkSession,
       users: DataFrame,
       salaries: DataFrame
-  ): IO[HiveUserData] = IO {
-    HiveUserData.persistUserData(sparkSession, users, salaries)
-    HiveUserData.readUserData(sparkSession)
-  }
+  ): IO[HiveUserData] =
+    for {
+      _        <- HiveUserData.persistUserData(sparkSession, users, salaries)
+      userData <- HiveUserData.readUserData(sparkSession)
+    } yield userData
 
   def calculateAndPersistNewSalary(
       sparkSession: SparkSession,
