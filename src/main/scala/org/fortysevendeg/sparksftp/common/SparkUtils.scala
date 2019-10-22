@@ -2,6 +2,7 @@ package org.fortysevendeg.sparksftp.common
 
 import java.net.URI
 
+import cats.effect.IO
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTPConfig}
@@ -11,7 +12,6 @@ object SparkUtils {
   def createSparkConfWithSFTPSupport(config: ReadingSFTPConfig): SparkConf = {
     new SparkConf()
       .set("spark.serializer", config.spark.serializer)
-      .set("spark.master", "local")
       .set(
         "spark.kryo.registrationRequired",
         config.spark.serializer.contains("KryoSerializer").toString
@@ -30,7 +30,7 @@ object SparkUtils {
     sparkSession
   }
 
-  def dataframeFromCSV(sparkSession: SparkSession, sftpUri: String): DataFrame = {
+  def dataframeFromCSV(sparkSession: SparkSession, sftpUri: String): IO[DataFrame] = IO {
     val inferSchema         = true
     val first_row_is_header = true
     val sourceUri           = new URI(sftpUri)
@@ -41,19 +41,39 @@ object SparkUtils {
       .csv(sourceUri.toString)
   }
 
-  def persistDataFrame(sparkSession: SparkSession, df: DataFrame, name: String) = {
+  def persistDataFrame(
+      sparkSession: SparkSession,
+      df: DataFrame,
+      name: String,
+      partitionBy: List[String] = List.empty
+  ): IO[Unit] = IO {
     // Persist the dataframes into Hive tables with parquet file format, the default compression for parquet is snappy, that is splittable for parquet.
+    // Another option: externalTable (HDFS, Hive)
     // If we wanted to debug any issue with the databases, we could use this: sparkSession.sparkContext.setLogLevel("DEBUG")
     sparkSession.sql(s"DROP TABLE IF EXISTS ${name}")
-    df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(name)
-  }
 
-  def dataframeToCompressedCsv(df: DataFrame, path: String) = {
     df.write
       .mode(SaveMode.Overwrite)
-      .option("codec", "org.apache.hadoop.io.compress.GzipCodec")
-      .csv(path)
+      .partitionBy(partitionBy: _*)
+      .format("parquet")
+      .saveAsTable(name)
   }
+
+  def dataframeToCompressedCsv(df: DataFrame, path: String): IO[Unit] =
+    IO {
+      df.coalesce(1)
+        .write
+        .mode(SaveMode.Overwrite)
+        .option("codec", "org.apache.hadoop.io.compress.GzipCodec")
+        .csv(path)
+    }
+
+  def dataframeToCsv(df: DataFrame, path: String): IO[Unit] =
+    IO {
+      df.write
+        .mode(SaveMode.Overwrite)
+        .csv(path)
+    }
 
   /**
    * Construct a Spark DataFrame reading a file from SFTP using the `springml` connector
@@ -62,7 +82,7 @@ object SparkUtils {
       sparkSession: SparkSession,
       sftpConfig: SFTPConfig,
       path: String
-  ): DataFrame = {
+  ): IO[DataFrame] = IO {
     sparkSession.read
       .format("com.springml.spark.sftp")
       .option("host", sftpConfig.sftpHost)
@@ -82,7 +102,7 @@ object SparkUtils {
       df: DataFrame,
       sftpConfig: SFTPConfig,
       path: String
-  ) = {
+  ): IO[Unit] = IO {
     df.write
       .format("com.springml.spark.sftp")
       .option("host", sftpConfig.sftpHost)

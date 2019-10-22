@@ -1,14 +1,13 @@
 package org.fortysevendeg.sparksftp
 
 import cats.effect.{ExitCode, IO, IOApp}
-import cats.syntax.flatMap._
-import cats.syntax.functor._
 import pureconfig.generic.auto._
 import org.apache.spark.SparkConf
 import org.fortysevendeg.sparksftp.common.SparkUtils._
-import org.apache.spark.sql.SparkSession
-import org.fortysevendeg.sparksftp.common.{HiveUserData, SparkUtils}
-import org.fortysevendeg.sparksftp.config.model.configs.ReadingSFTPConfig
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.fortysevendeg.sparksftp.common.HiveUserData._
+import org.fortysevendeg.sparksftp.common.HiveUserData
+import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTPConfig}
 import org.training.trainingbot.config.ConfigLoader
 import org.fortysevendeg.sparksftp.config.model.configs
 
@@ -18,41 +17,70 @@ object ReadingSFTPConnectorApp extends IOApp {
     ConfigLoader[IO]
       .loadConfig[ReadingSFTPConfig]
 
-  def run(args: List[String]): IO[ExitCode] =
-    for {
-      config: ReadingSFTPConfig <- setupConfig
-      defaultSparkConf: SparkConf = SparkUtils.createSparkConfWithSFTPSupport(config)
-      sparkSession: SparkSession = SparkSession.builder
+  def run(args: List[String]): IO[ExitCode] = {
+
+    def createSparkSession(config: ReadingSFTPConfig): IO[SparkSession] = IO {
+      val defaultSparkConf: SparkConf = createSparkConfWithSFTPSupport(config)
+      SparkSession.builder
         .config(defaultSparkConf)
         .enableHiveSupport
         .getOrCreate()
+    }
 
+    def readDataFramesWithSFTPConnector(
+        sparkSession: SparkSession,
+        sftpConfig: SFTPConfig
+    ): IO[(DataFrame, DataFrame)] =
+      for {
+        users <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpUserPath
+        )
+        salaries <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpSalaryPath
+        )
+      } yield (users, salaries)
+
+    def toSFTPCompressedCSVWithSFTPConnector(
+        userData: DataFrame,
+        salariesData: DataFrame,
+        userNewSalaries: DataFrame,
+        sftpConfig: SFTPConfig
+    ): IO[Unit] =
+      for {
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userData,
+          sftpConfig,
+          s"${sftpConfig.sftpUserPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          salariesData,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userNewSalaries,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_transformed_output"
+        )
+      } yield ()
+
+    for {
+      config  <- setupConfig
+      session <- createSparkSession(config)
       sftpConfig = configs.SFTPConfig
-        .configFromContextProperties(sparkSession.sparkContext, config.sftp)
-
-      // Read the source files from SFTP into dataframes
-      users = dataframeFromCsvWithSFTPConnector(sparkSession, sftpConfig, sftpConfig.sftpUserPath)
-      salaries = dataframeFromCsvWithSFTPConnector(
-        sparkSession,
-        sftpConfig,
-        sftpConfig.sftpSalaryPath
+        .configFromContextProperties(session.sparkContext, config.sftp)
+      (users, salaries) <- readDataFramesWithSFTPConnector(session, sftpConfig)
+      HiveUserData(userData, salariesData, userSalaries) <- persistAndReadUserData(
+        session,
+        users,
+        salaries
       )
-
-      // Sample operations to persist and query the Hive database
-      _                                        = HiveUserData.persistUserData(sparkSession, users, salaries)
-      (userDataFromHive, salariesDataFromHive) = HiveUserData.readUserData(sparkSession)
-
-      // Write dataframe as CSV file to FTP server
-      _ = dataframeToCompressedCsvWithSFTPConnector(
-        userDataFromHive,
-        sftpConfig,
-        s"${sftpConfig.sftpUserPath}_output"
-      )
-      _ = dataframeToCompressedCsvWithSFTPConnector(
-        salariesDataFromHive,
-        sftpConfig,
-        s"${sftpConfig.sftpSalaryPath}_output"
-      )
-
+      userNewSalaries <- calculateAndPersistNewSalary(session, userSalaries)
+      _               <- toSFTPCompressedCSVWithSFTPConnector(userData, salariesData, userNewSalaries, sftpConfig)
     } yield ExitCode.Success
+  }
 }
