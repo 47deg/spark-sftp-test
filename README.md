@@ -48,4 +48,4 @@ PATH-TO-SPARK/bin/spark-submit  --class org.fortysevendeg.sparksftp.ReadingSFTPH
 
 ### On your Google Cloud Dataproc instance for Spark.
 
-You can use the scripts `gcloudsubmit1` and `gcloudsubmit2.sh` to see examples for submitting the spark jobs to a Google Cloud Dataproc cluster.
+You can use the scripts `gcloudsubmit1.sh` and `gcloudsubmit2.sh` to see examples for submitting the spark jobs to a Google Cloud Dataproc cluster.
