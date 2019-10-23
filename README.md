@@ -6,7 +6,10 @@ The process can be summarized in
 -   Processed by Spark and stored in Parquet/Hive, original data + the ones with tranformations
 -   Storing the results on the SFTP server.
 
-There is currently two implemenations
+There are currently two implementations:
+
+- Spark with a SFTP connector
+- Spark with Hadoop's SFTP FileSystem Support
 
 ### Spark with a SFTP connector
 
