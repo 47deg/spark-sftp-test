@@ -16,11 +16,11 @@ There are currently two implementations:
 This is one of the prototypes developed that works and is based on the springml connector https://github.com/springml/spark-sftp
 
 This solution is currently the fastest
-[ReadingSFTPConnectorApp](https://github.com/47deg/sparksftpTest/blob/master/src/main/scala/org/fortysevendeg/sparksftp/ReadingSFTPConnectorApp.scala)
+[ReadingSFTPConnectorApp](/src/main/scala/org/fortysevendeg/sparksftp/ReadingSFTPConnectorApp.scala)
 
 ### Spark with Hadoop's SFTP FileSystem Support
 
-[ReadingSFTPHadoopApp](https://github.com/47deg/sparksftpTest/blob/master/src/main/scala/org/fortysevendeg/sparksftp/ReadingSFTPHadoopApp.scala)
+[ReadingSFTPHadoopApp](/src/main/scala/org/fortysevendeg/sparksftp/ReadingSFTPHadoopApp.scala)
 
 
 With this solution we used the native support by Hadoop, although the implementation in the current releases contain
