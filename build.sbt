@@ -1,4 +1,4 @@
-val PureconfigVersion     = "0.10.2"
+val PureconfigVersion     = "0.12.1"
 val SparkVersion          = "2.4.3" //To be compatible with GCloud Dataproc latest image
 
 val CatsEffectVersion     = "2.0.0"
