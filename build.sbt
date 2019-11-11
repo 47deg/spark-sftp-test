@@ -1,4 +1,4 @@
-val PureconfigVersion     = "0.10.2"
+val PureconfigVersion     = "0.12.1"
 val SparkVersion          = "2.4.4"
 val CatsEffectVersion     = "2.0.0"
 val LogbackVersion        = "1.2.3"
