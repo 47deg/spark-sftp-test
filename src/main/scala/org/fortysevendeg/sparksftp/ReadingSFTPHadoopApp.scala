@@ -1,14 +1,17 @@
 package org.fortysevendeg.sparksftp
 
-import java.net.URI
-
 import pureconfig.generic.auto._
 import cats.effect.{ExitCode, IO, IOApp}
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.fortysevendeg.sparksftp.common.RegisterInKryo
-import org.fortysevendeg.sparksftp.config.model.configs.ReadingSFTPConfig
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.fortysevendeg.sparksftp.common.HiveUserData._
+import org.fortysevendeg.sparksftp.common.HiveUserData
+import org.fortysevendeg.sparksftp.common.SparkUtils._
+import org.fortysevendeg.sparksftp.config.model.configs
+import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTPConfig}
 import org.training.trainingbot.config.ConfigLoader
+
+case class Salary(name: String, salary: Long)
 
 object ReadingSFTPHadoopApp extends IOApp {
 
@@ -16,69 +19,63 @@ object ReadingSFTPHadoopApp extends IOApp {
     ConfigLoader[IO]
       .loadConfig[ReadingSFTPConfig]
 
-  def run(args: List[String]): IO[ExitCode] =
-    for {
-      config: ReadingSFTPConfig <- setupConfig
-      defaultSparkConf: SparkConf = new SparkConf()
-        .set("spark.serializer", config.spark.serializer)
-        .set("spark.master", "local")
-        .set(
-          "spark.kryo.registrationRequired",
-          config.spark.serializer.contains("KryoSerializer").toString
-        )
-        .set("spark.hadoop.fs.sftp.impl", "org.apache.hadoop.fs.sftp.SFTPFileSystem")
-        .set("fs.sftp.impl", "org.apache.hadoop.fs.sftp.SFTPFileSystem")
-        .set("fs.sftp.proxy.host", config.sftp.sftpHost)
-        .set("fs.sftp.host.port", "22")
+  /**
+   * When preparing the SparkConf, we could also use:
+   * .set("spark.master", "local")
+   * .set("spark.master", "local[*]")
+   *  to run the application locally, for example, through "sbt run"
+   */
+  def run(args: List[String]): IO[ExitCode] = {
+    def createSparkSession(config: ReadingSFTPConfig): IO[SparkSession] = IO {
+      val defaultSparkConf: SparkConf = createSparkConfWithSFTPSupport(config)
+        .set("fs.sftp.impl", "org.apache.hadoop.fs.sftpwithseek.SFTPFileSystem")
         .set("fs.sftp.impl.disable.cache", "true")
-        .registerKryoClasses(RegisterInKryo.classes.toArray)
+      getSparkSessionWithHive(defaultSparkConf)
+    }
 
-      sftpPath = s"sftp://${config.sftp.sftpUser}:${config.sftp.sftpPass}@${config.sftp.sftpHost}" + s":${config.sftp.sftpPath}"
+    def userPath(sftpConfig: SFTPConfig): String =
+      s"sftp://${sftpConfig.sftpUser}:${sftpConfig.sftpPass}@${sftpConfig.sftpHost}" + s":${sftpConfig.sftpUserPath}"
 
-      sparkSession: SparkSession = SparkSession.builder
-        .config(defaultSparkConf)
-        .enableHiveSupport
-        .getOrCreate()
+    def salariesPath(sftpConfig: SFTPConfig): String =
+      s"sftp://${sftpConfig.sftpUser}:${sftpConfig.sftpPass}@${sftpConfig.sftpHost}" + s":${sftpConfig.sftpSalaryPath}"
 
-      // Others way of reading, if we wanted to read as inputstreamT
-      // context = sparkSession.sparkContext
-      // _ = context.addFile(sftpPath)
-      // fileName = SparkFiles.get(sftpPath.split("/").last)
-      // fileRDD = context.textFile(fileName)
-      // sourceFS = FileSystem.get(sourceUri, context.hadoopConfiguration)
-      // fsinputStream = sourceFS.open(new Path(sourceUri.getPath))
-      // context.textFile
-      // context.hadoopFile
-      // context.newAPIHadoopFile()
-      inferSchema         = true
-      first_row_is_header = true
-      sourceUri           = new URI(sftpPath)
+    def readDataFramesFromSFTP(
+        sparkSession: SparkSession,
+        sftpConfig: SFTPConfig
+    ): IO[(DataFrame, DataFrame)] =
+      for {
+        users    <- dataframeFromCSV(sparkSession, userPath(sftpConfig))
+        salaries <- dataframeFromCSV(sparkSession, salariesPath(sftpConfig))
+      } yield (users, salaries)
 
-      //TODO: Option 1. Storing it, as fast as possible, without processing. Probably easier. Implement
-      //TODO: Option 2. Convert to RDD (optionally process it) and store it.
-      //TODO: Test reading zip, and multiple files in a directory.
-      //TODO: Test reading by partitions in parallel.
+    def toSFTPCompressedCSV(
+        userData: DataFrame,
+        salariesData: DataFrame,
+        userNewSalaries: DataFrame,
+        sftpConfig: SFTPConfig
+    ): IO[Unit] =
+      for {
+        _ <- dataframeToCompressedCsv(userData, s"${userPath(sftpConfig)}_output")
+        _ <- dataframeToCompressedCsv(salariesData, s"${salariesPath(sftpConfig)}_output")
+        _ <- dataframeToCompressedCsv(
+          userNewSalaries,
+          s"${salariesPath(sftpConfig)}_transformed_output"
+        )
+      } yield ()
 
-      df = sparkSession.read
-        .option("header", first_row_is_header)
-        //    option("delimiter", delimiter).
-        //    option("quote", quote).
-        //    option("escape", escape).
-        //    option("multiLine", multiLine).
-        .option("inferSchema", inferSchema)
-        .csv(sourceUri.getPath)
-        .repartition(config.spark.partitions)
-
-      _ = df.printSchema()
-      _ = println(s"##############COUNT: ${df.count()}")
-      _ = df.show(false)
-
-      //_ = df.collect().foreach(println)
-      //_ = data.printSchema()
-      //_ = data.show(false)
-
-      exitCode = ExitCode.Success
-
-    } yield exitCode
-
+    for {
+      config  <- setupConfig
+      session <- createSparkSession(config)
+      sftpConfig = configs.SFTPConfig
+        .configFromContextProperties(session.sparkContext, config.sftp)
+      (users, salaries) <- readDataFramesFromSFTP(session, sftpConfig)
+      HiveUserData(userData, salariesData, userSalaries) <- persistAndReadUserData(
+        session,
+        users,
+        salaries
+      )
+      userNewSalaries <- calculateAndPersistNewSalary(session, userSalaries)
+      _               <- toSFTPCompressedCSV(userData, salariesData, userNewSalaries, sftpConfig)
+    } yield ExitCode.Success
+  }
 }

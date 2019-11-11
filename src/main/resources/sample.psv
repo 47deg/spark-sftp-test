@@ -1,3 +1,3 @@
-title|name|age
-mr|john doe|34
-mrs|jane doe|30
+ID,job,email,name,age
+1,Engineer,pp@pp.com,Joseph,25
+2,Devops,john@johnny.com,Johnny,30

@@ -1,14 +1,15 @@
 package org.fortysevendeg.sparksftp
 
 import cats.effect.{ExitCode, IO, IOApp}
-import cats.syntax.flatMap._
-import cats.syntax.functor._
 import pureconfig.generic.auto._
 import org.apache.spark.SparkConf
+import org.fortysevendeg.sparksftp.common.SparkUtils._
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.fortysevendeg.sparksftp.common.RegisterInKryo
-import org.fortysevendeg.sparksftp.config.model.configs.ReadingSFTPConfig
+import org.fortysevendeg.sparksftp.common.HiveUserData._
+import org.fortysevendeg.sparksftp.common.HiveUserData
+import org.fortysevendeg.sparksftp.config.model.configs.{ReadingSFTPConfig, SFTPConfig}
 import org.training.trainingbot.config.ConfigLoader
+import org.fortysevendeg.sparksftp.config.model.configs
 
 object ReadingSFTPConnectorApp extends IOApp {
 
@@ -18,57 +19,68 @@ object ReadingSFTPConnectorApp extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] = {
 
-    for {
-      config: ReadingSFTPConfig <- setupConfig
-      defaultSparkConf: SparkConf = new SparkConf()
-        .set("spark.serializer", config.spark.serializer)
-        .set("spark.master", "local")
-        .set(
-          "spark.kryo.registrationRequired",
-          config.spark.serializer.contains("KryoSerializer").toString
-        )
-        .set("spark.hadoop.fs.sftp.impl", "org.apache.hadoop.fs.sftp.SFTPFileSystem")
-        .registerKryoClasses(RegisterInKryo.classes.toArray)
-
-      sparkSession: SparkSession = SparkSession.builder
+    def createSparkSession(config: ReadingSFTPConfig): IO[SparkSession] = IO {
+      val defaultSparkConf: SparkConf = createSparkConfWithSFTPSupport(config)
+      SparkSession.builder
         .config(defaultSparkConf)
         .enableHiveSupport
         .getOrCreate()
+    }
 
-      // Construct Spark data frame reading a file from SFTP
-      data: DataFrame = sparkSession.read
-        .format("com.springml.spark.sftp") //TODO: Is this library single threaded?
-        .option("host", config.sftp.sftpHost)
-        .option("username", config.sftp.sftpUser)
-        .option("password", config.sftp.sftpPass)
-        .option("fileType", "csv")
-        .option("inferSchema", "true")
-        .load("/tmp/spark/sample.psv")
-        .repartition(config.spark.partitions)
+    def readDataFramesWithSFTPConnector(
+        sparkSession: SparkSession,
+        sftpConfig: SFTPConfig
+    ): IO[(DataFrame, DataFrame)] =
+      for {
+        users <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpUserPath
+        )
+        salaries <- dataframeFromCsvWithSFTPConnector(
+          sparkSession,
+          sftpConfig,
+          sftpConfig.sftpSalaryPath
+        )
+      } yield (users, salaries)
 
-      // Some other sample operations
-      //_ = sparkSession.catalog.listDatabases().show(truncate = false)
-      //_ = sparkSession.catalog.listTables().show(truncate = false)
-      //_ = sparkSession.sql("show tables").show(truncate = false)
+    def toSFTPCompressedCSVWithSFTPConnector(
+        userData: DataFrame,
+        salariesData: DataFrame,
+        userNewSalaries: DataFrame,
+        sftpConfig: SFTPConfig
+    ): IO[Unit] =
+      for {
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userData,
+          sftpConfig,
+          s"${sftpConfig.sftpUserPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          salariesData,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_output"
+        )
+        _ <- dataframeToCompressedCsvWithSFTPConnector(
+          userNewSalaries,
+          sftpConfig,
+          s"${sftpConfig.sftpSalaryPath}_transformed_output"
+        )
+      } yield ()
 
-      _ = data.printSchema()
-      _ = println(s"##############COUNT: ${data.count()}")
-      _ = data.show(false)
-
-      // TODO: Other steps to do after the processing.
-
-      //      Write dataframe as CSV file to FTP server
-      //      df.write().
-      //      format("com.springml.spark.sftp").
-      //      option("host", "SFTP_HOST").
-      //      option("username", "SFTP_USER").
-      //      option("password", "****").
-      //      option("fileType", "csv").
-      //      save("/ftp/files/sample.csv")
-
-      exitCode = ExitCode.Success
-
-    } yield exitCode
-
+    for {
+      config  <- setupConfig
+      session <- createSparkSession(config)
+      sftpConfig = configs.SFTPConfig
+        .configFromContextProperties(session.sparkContext, config.sftp)
+      (users, salaries) <- readDataFramesWithSFTPConnector(session, sftpConfig)
+      HiveUserData(userData, salariesData, userSalaries) <- persistAndReadUserData(
+        session,
+        users,
+        salaries
+      )
+      userNewSalaries <- calculateAndPersistNewSalary(session, userSalaries)
+      _               <- toSFTPCompressedCSVWithSFTPConnector(userData, salariesData, userNewSalaries, sftpConfig)
+    } yield ExitCode.Success
   }
 }
