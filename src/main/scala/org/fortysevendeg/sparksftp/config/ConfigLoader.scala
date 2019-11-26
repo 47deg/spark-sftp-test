@@ -3,7 +3,7 @@ package config
 
 import cats.effect.Sync
 import cats.syntax.either._
-import pureconfig.{ConfigReader, Derivation}
+import pureconfig.{ConfigReader, ConfigSource, Derivation}
 
 trait ConfigLoader[F[_]] {
 
@@ -16,8 +16,8 @@ object ConfigLoader {
 
     override def loadConfig[Config](implicit reader: Derivation[ConfigReader[Config]]): F[Config] =
       Sync[F].fromEither(
-        pureconfig
-          .loadConfig[Config]
+        ConfigSource.default
+          .load[Config]
           .leftMap(e => new IllegalStateException(s"Error loading configuration: $e"))
       )
 

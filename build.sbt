@@ -1,10 +1,9 @@
-val PureconfigVersion     = "0.10.2"
+val PureconfigVersion     = "0.12.1"
 val SparkVersion          = "2.4.3" //To be compatible with GCloud Dataproc latest image
 
 val CatsEffectVersion     = "2.0.0"
 val LogbackVersion        = "1.2.3"
 val Log4catsVersion       = "1.0.0"
-val HadoopVersion         = "2.9.2"
 
 import org.scalafmt.sbt.ScalafmtPlugin.autoImport._
 
