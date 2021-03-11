@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/
-export SPARK_DIST_CLASSPATH=$(/home/mendezr/development/hadoop-2.9.2/bin/hadoop classpath)
+    export SPARK_DIST_CLASSPATH=$(/home/mendezr/development/hadoop-2.9.2/bin/hadoop classpath)
 export HADOOP_HOME=$HOME/development/hadoop-2.9.2
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native
 
