@@ -1,4 +1,4 @@
-## sparksftpTest is a project to showcase an ETL pipeline: SFTP - Hive - SFTP with Spark
+     ## sparksftpTest is a project to showcase an ETL pipeline: SFTP - Hive - SFTP with Spark
 
 The process can be summarized in
 
